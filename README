@@ -1,0 +1,158 @@
+================================================================================
+
+	TEACA BOGDAN
+
+================================================================================
+
+	I. IMPLEMENTAREA CLASEI "CommunicationChannel"
+
+--------------------------------------------------------------------------------
+	I.1. Semafoarele si structurile de date utilizate
+--------------------------------------------------------------------------------
+
+Am definit mai multe structuri de date cu care am facut posibila comunicatia
+intre vrajitori si mineri:
+
+minersMessageBuffer = buffer de mesaje al canalului de comunicatie al minerilor.
+Din acest buffer vrajitorii citesc mesaje, iar minerii scriu mesaje.
+
+wizardsMessageBuffer = buffer de mesaje al canalului de comunicatie al
+vrajitorilor. Din acest buffer minerii citesc mesaje, iar vrajitorii scriu
+mesaje.
+
+parentRoomsMessageBufferA = utilizez acest hashmap in functia
+"putMessageWizardChannel()" pentru a salva primul mesaj (mesajul care contine
+informatiile despre camera parinte) dintr-o pereche de mesaje <camera parine,
+camera curenta>.
+
+parentRoomsMessageBufferB = utilizez acest hashmap in functia
+"getMessageWizardChannel()" pentru a salva primul mesaj (mesajul care contine
+informatiile despre camera parinte) dintr-o pereche de mesaje <camera parine,
+camera curenta>.
+
+minersChannelSemaphoreA si minersChannelSemaphoreB = semafoare utilizate in
+pereche in functiile "putMessageMinerChannel()" si "getMessageMinerChannel()"
+cu care ma asigur ca vrajitorii asteapta sa existe mesaje de la mineri in buffer
+(in cazul in care vrajitorii "consuma" toate mesajele din buffer, acestia vor
+astepta pana cand minerii vor "produce" cel putin un mesaj.
+
+wizardsChannelSemaphore = semafor utilizat in functiiile
+"putMessageWizardChannel()" si "getMessageWizardChannel()" cu care ne asiguram
+ca aceste functii sunt executate de un singur thread la un moment dat.
+
+uniqueHashes = hashset in care salvam toate hash-urile camerelor intalnite
+pentru a nu repeta calcularea solutiilor (hash-urilor).
+
+--------------------------------------------------------------------------------
+	I.2. Functia "putMessageMinerChannel()"
+--------------------------------------------------------------------------------
+
+In functia "putMessageMinerChannel()" am decrementat contorul semaforului
+"minersChannelSemaphoreA". Folosesc acest semafor pentru a limita cate mesaje sa
+se afle maxim in buffer la un moment dat, apoi adaug in buffer-ul canalului
+minerilor mesajul produs de mineri si intr-un final incrementez contorul
+semaforului B astfel incat vrajitorii sa "stie" ca au cel putin un mesaj pe
+care sa-l poata prelua/consuma.
+
+--------------------------------------------------------------------------------
+	I.3. Functia "getMessageMinerChannel()"
+--------------------------------------------------------------------------------
+
+In functia "getMessageMinerChannel()" decrementez contorul semaforului B deoarece
+un vrajitor este pe cale sa consume un mesaj din buffer. Daca acest semafor are
+valoarea contorului egala cu 0 inainte de apelarea functiei "aquire()", atunci
+vrajitorii ar fi asteptat pana cand minerii produceau macar un mesaj (sa existe
+macar un mesaj in buffer pe care vrajitorii sa-l consume). Apoi scot din buffer
+un mesaj pe care vrajitorii sa-l consume si incrementez contorul semaforului A.
+
+--------------------------------------------------------------------------------
+	I.4. Functia "putMessageWizardChannel()"
+--------------------------------------------------------------------------------
+
+In functia "putMessageWizardChannel()" decrementez contorul semaforului astfel
+incat functia sa fie executata de un singur thread la un moment dat in scopul de
+a pune mesajele in ordine in buffer-ul canalului vrajitorilor. Punerea mesajelor
+in ordine in acest buffer este importanta intrucat vrajitorii produc mesaje in
+pereche <camera parinte, camera curenta> care trebuie sa fie citite in ordinea
+perechii de catre mineri. Altfel, mesajele s-ar amesteca in buffer, iar canalul
+de comunicare nu ar functiona.
+
+Apoi verific daca am ajuns la capatul unui sir de mesaje produse de catre un
+vrajitor sau daca am gasit toate solutiile.
+
+Mai departe distribui mesajele astfel incat fiecare thread vrajitor sa aiba
+propriul loc temporar in care sa salveze primul mesaj pe care il produce
+(mesajul care contine informatiile despre camera parinte), astfel incat dupa
+ce acelasi vrajitor produce si al doilea mesaj din pereche (mesajul care contine
+informatiile despre camera curenta) sa pot pune in ordine in buffer-ul canalului
+vrajitorilor perechea de mesaje <camera pereche, camera curenta>.
+
+Daca spatiul temporar alocat vrajitorului cu ID-ul thread-ului "tid" este gol,
+inseamna ca acest vrajitor nu a produs anterior primul mesaj din perechea
+curenta de mesaje, deci mesajul primit ca parametru este chiar primul mesaj,
+deci il pun in acest spatiu temporar al vrajitorului cu ID-ul "tid".
+
+Daca spatiul temporar alocat vrajitorului contine deja un mesaj inseamna ca
+mesajul primit ca parametru este al doilea mesaj din perechea curenta de mesaje,
+deci acum am perechea completa.
+
+Verifica daca hash-ul camerei curente se afla deja in lista de hash-uri gasite
+pana acum (adica daca a fost deja calculat). Daca hash-ul a fost deja calculat
+atunci nu mai are rost sa-l pun in buffer.
+
+Salvez in buffer-ul canalului vrajitorilor in ordine perechea de mesaje <camera
+pereche, camera curenta>, apoi incrementez contorul semaforului pentru a
+semnaliza altor thread-uri faptul ca thread-ul curent a terminat de executat
+continutul functiei.
+
+--------------------------------------------------------------------------------
+	I.5. Functia getMessageWizardChannel()"
+--------------------------------------------------------------------------------
+
+Decrementez contorul semaforului astfel incat functia sa fie executata de un
+singur thread la un moment dat in scopul de a scoate mesajele in ordine din
+buffer-ul canalului vrajitorilor. Scoaterea mesajelor in ordine in acest buffer
+este importanta intrucat minerii consuma mesaje din pereche <camera parinte,
+camera curenta> care trebuie sa fie citite in ordinea perechii.
+
+Distribui mesajele astfel incat fiecare thread miner sa aiba propriul loc
+temporar in care sa salveze primul mesaj pe care il consuma (mesajul care
+contine informatiile despre camera parinte), astfel incat dupa ce acelasi miner
+consuma si al doilea mesaj din pereche (mesajul care contine informatiile despre
+camera curenta) sa pot oferi in ordine mesajele minerului.
+
+Daca spatiul temporar alocat minerului cu ID-ul thread-ului "tid" este gol,
+inseamna ca acest miner nu a solicitat anterior primul mesaj din perechea
+curenta de mesaje, deci mesajul pe care trebuie sa il oferim este chiar primul
+mesaj, deci il salvez in acest spatiu temporar al minerului cu ID-ul "tid".
+
+Daca spatiul temporar alocat minerului contine deja un mesaj inseamna ca mesajul
+solicitat de catre acest miner este al doilea mesaj din perechea curenta de
+mesaje, iar intr-un final incrementez contorul semaforului pentru a semnaliza
+altor thread-uri faptul ca thread-ul curent a terminat de executat continutul
+functiei.
+
+================================================================================
+
+	II. IMPLEMENTAREA CLASEI "Miner"
+
+--------------------------------------------------------------------------------
+
+Salvez primul mesaj din perechea de mesaje pe care o primeste minerul curent,
+acest prim mesaj continand informatiile despre camera parinte, dupa care verific
+daca mesajul primit este null. Daca este null, inseamna ca in acest moment nu
+exista mesaje in buffer-ul de mesaje al canalului vrajitorilor, si deci voi
+cicla in bucla while pana cand gasesc mesaje in buffer.
+
+Salvez al doilea mesaj din perechea de mesaje pe care o primeste minerul curent,
+acest al doilea mesaj continand informatiile despre camera curenta.
+
+Calculez hash-ul hash-ului hash-ului ... hash-ului mesajului curent de hashCount
+numar de ori, hash-ul rezultat reprezentand solutia pentru camera curenta.
+
+Apoi creez un mesaj nou in care pun ID-ul camerei parinte, ID-ul camerei curente
+si hash-ul tocmai calculat (solutia camerei curente) si trimit mesajul nou creat
+pe canalul minerilor, astfel incat vrajitorii sa preia acest mesaj cu care sa
+deschida camere noi.
+
+================================================================================
